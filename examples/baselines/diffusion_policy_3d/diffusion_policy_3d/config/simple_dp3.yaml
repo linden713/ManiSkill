@@ -107,7 +107,7 @@ training:
   resume: False
   lr_scheduler: cosine
   lr_warmup_steps: 500
-  num_epochs: 3000
+  num_epochs: 2000
   gradient_accumulate_every: 1
   use_ema: True
   rollout_every: 200
@@ -123,10 +123,10 @@ logging:
   id: null
   mode: online
   name: ${training.seed}
-  project: dp3
+  project: simpledp3
   resume: true
   tags:
-  - dp3
+  - simpledp3
 
 
 checkpoint:

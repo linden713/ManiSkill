@@ -9,7 +9,7 @@ from diffusion_policy_3d.common.utils import dict_apply
 from diffusion_policy_3d.env_runner.base_runner import BaseRunner
 import diffusion_policy_3d.common.logger_utils as logger_util
 from termcolor import cprint
-
+import sapien
 import os
 import time
 
@@ -20,6 +20,7 @@ from mani_skill.utils import gym_utils
 from mani_skill.utils import common
 from mani_skill.utils.wrappers import CPUGymWrapper, RecordEpisode
 from mani_skill.vector.wrappers.gymnasium import ManiSkillVectorEnv
+from mani_skill.envs.scene import ManiSkillScene
 
 from diffusion_policy_3d.common.observation_wrapper import FlattenPoindCloudObservationWrapper
 from diffusion_policy_3d.common.multistep_wrapper import MultiStepWrapper
@@ -165,6 +166,7 @@ class ManiSkillRunner(BaseRunner):
                  ):
         super().__init__(output_dir)
         self.task_name = task_name
+        self.traj_visual = None  
 
         reward_agg_method='sum'
 
@@ -230,7 +232,9 @@ class ManiSkillRunner(BaseRunner):
             done = False
             traj_reward = 0
             is_success = False
+            count = 0
             while not done:
+                count += 1
                 np_obs_dict = dict(obs)
                 obs_dict = dict_apply(np_obs_dict,
                                       lambda x: torch.from_numpy(x).to(
@@ -246,12 +250,55 @@ class ManiSkillRunner(BaseRunner):
                                             lambda x: x.detach().to('cpu').numpy())
                 action = np_action_dict['action'].squeeze(0)
 
+                # Visual
+                if True :
+                    current_ee_pos = np_obs_dict['agent_pos'].squeeze()[1,18:21] # 获取当前末端执行器位置
+                    action_modified = np.vstack([np.zeros((1, 3)), action[:, :3]])
+                    # 2. 限制 action 的绝对值范围（假设范围是 [-1, 1]）
+                    action_clipped = np.clip(action_modified, -0.1, 0.1)
+                    future_ee_pos = current_ee_pos + np.cumsum(action_clipped, axis=0)  # 计算未来轨迹点
+
+                    # 如果轨迹可视化对象已存在，更新位置；否则创建
+                    if self.traj_visual is not None:
+                        update_trajectory_visual(self.traj_visual, future_ee_pos)
+                    else:
+                        self.traj_visual = build_trajectory_visual(self.env.base_env.scene, future_ee_pos)
+                    # print("agent_pos")
+                    # print(np_obs_dict['agent_pos'].squeeze()[1,18:21])
+                    # print("action:")
+                    # print(action_clipped)
+                    # print("future_ee_pos")
+                    # print(future_ee_pos)
+                    # print("--------------------") 
+                # planning
+                if True:
+                    if count>15 and count <65:
+                        # print("planning")
+                        current_ee_pos = np_obs_dict['agent_pos'].squeeze()[1,18:21]
+                        num_rows = action.shape[0]  # 获取原 action 的行数
+                        # 目标位置 (回到这个位置)
+                        target_pos = np.array([0.01225358, 0.03801143, 0.1821523])
+                    
+                        if count<50:
+                            # 创建新的 action，每一行固定值
+                            action = np.tile(np.array([0.00, 0.00, 0.10, 0.00, 0, 0.00, -1]), (num_rows, 1))
+                            # print(action)
+                        # else: 
+                        #     # 计算每步需要执行的变化量
+                        #     delta_pos = (target_pos - current_ee_pos) / num_rows  # 让 ee_pos 逐步回到目标位置
+                        #     delta_pos = delta_pos *3
+                        #     # 创建新的 action，每行值让 ee_pos 逐步回到目标
+                        #     action = np.tile(np.array([delta_pos[0], delta_pos[1], delta_pos[2], 0.00, 0, 0.00, -1]), (num_rows, 1))
+
+                        
+                
                 obs, reward, done, _, info = env.step(action)
 
                 traj_reward += reward
                 done = np.all(done)
                 is_success = is_success or max(info['success'])
-
+            print("count")
+            print(count)
             all_success_rates.append(is_success)
             all_traj_rewards.append(traj_reward)
 
@@ -282,3 +329,27 @@ class ManiSkillRunner(BaseRunner):
         # videos = None
 
         return log_data
+def build_trajectory_visual(scene: ManiSkillScene, traj_points):
+    """ 在 scene 里添加小球表示轨迹点，并返回可更新的 Actor 列表 """
+    visual_spheres = []
+    initial_pos = np.array([0.01225358, 0.03801143, 0.1821523]) 
+    for i, point in enumerate(traj_points):  
+        builder = scene.create_actor_builder()  # 每个小球需要一个新 builder
+        builder.add_sphere_visual(
+            pose=sapien.Pose(p=point),
+            radius=0.01,  
+            material=sapien.render.RenderMaterial(base_color=[1, 0, 0, 0.8])  
+        )
+        sphere_actor = builder.build_kinematic(name=f"trajectory_sphere_{i}")  # 添加唯一索引
+        sphere_actor.set_pose(sapien.Pose(p=point)) 
+        visual_spheres.append(sphere_actor)  # 存储 Actor
+
+    return visual_spheres  # 返回所有小球的 Actor 列表
+
+
+    return visual_spheres  # 直接返回存储小球 Actor 的列表
+def update_trajectory_visual(traj_visual, traj_points):
+    """ 更新已有的轨迹可视化对象（更新小球位置） """
+    for sphere, new_pose in zip(traj_visual, traj_points):
+        sphere.set_pose(sapien.Pose(p=new_pose))  # 直接更新 Actor 的位置
+

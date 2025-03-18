@@ -41,11 +41,11 @@ class ManiSkillEnv(gym.Wrapper):
         self.min_bound = [x_min, y_min, z_min]
         self.max_bound = [x_max, y_max, z_max]
 
-        self.episode_length = self._max_episode_steps = 300
+        self.episode_length = self._max_episode_steps = 300 # lch fixed？
 
         # TODO: check the following action, state, observation space dimension
         self.action_space = self.base_env.action_space
-        self.obs_state_dim = self.base_env.observation_space["state"].shape[1] #29
+        self.obs_state_dim = self.base_env.observation_space["state"].shape[1] # TODO 29 or 25
         self.observation_space = spaces.Dict({
             'agent_pos': spaces.Box(
                 low=-np.inf,
