@@ -12,6 +12,7 @@ from termcolor import cprint
 import sapien
 import os
 import time
+import yaml
 
 from typing import Optional
 
@@ -201,6 +202,8 @@ class ManiSkillRunner(BaseRunner):
             wrappers=[FlattenPoindCloudObservationWrapper],
         )
 
+
+
         self.eval_episodes = eval_episodes
 
         self.fps = fps
@@ -252,6 +255,7 @@ class ManiSkillRunner(BaseRunner):
 
                 # Visual
                 if True :
+
                     current_ee_pos = np_obs_dict['agent_pos'].squeeze()[1,18:21] # 获取当前末端执行器位置
                     action_modified = np.vstack([np.zeros((1, 3)), action[:, :3]])
                     # 2. 限制 action 的绝对值范围（假设范围是 [-1, 1]）
@@ -261,17 +265,13 @@ class ManiSkillRunner(BaseRunner):
                     # 如果轨迹可视化对象已存在，更新位置；否则创建
                     if self.traj_visual is not None:
                         update_trajectory_visual(self.traj_visual, future_ee_pos)
+
                     else:
                         self.traj_visual = build_trajectory_visual(self.env.base_env.scene, future_ee_pos)
-                    # print("agent_pos")
-                    # print(np_obs_dict['agent_pos'].squeeze()[1,18:21])
-                    # print("action:")
-                    # print(action_clipped)
-                    # print("future_ee_pos")
-                    # print(future_ee_pos)
-                    # print("--------------------") 
+                        random_actors = build_random_objects_visual(self.env.base_env.scene, "diffusion_policy_3d/config/task/obstacle_config.yaml")
+
                 # planning
-                if True:
+                if False:
                     if count>15 and count <65:
                         # print("planning")
                         current_ee_pos = np_obs_dict['agent_pos'].squeeze()[1,18:21]
@@ -283,12 +283,12 @@ class ManiSkillRunner(BaseRunner):
                             # 创建新的 action，每一行固定值
                             action = np.tile(np.array([0.00, 0.00, 0.10, 0.00, 0, 0.00, -1]), (num_rows, 1))
                             # print(action)
-                        # else: 
-                        #     # 计算每步需要执行的变化量
-                        #     delta_pos = (target_pos - current_ee_pos) / num_rows  # 让 ee_pos 逐步回到目标位置
-                        #     delta_pos = delta_pos *3
-                        #     # 创建新的 action，每行值让 ee_pos 逐步回到目标
-                        #     action = np.tile(np.array([delta_pos[0], delta_pos[1], delta_pos[2], 0.00, 0, 0.00, -1]), (num_rows, 1))
+                        else: 
+                            # 计算每步需要执行的变化量
+                            delta_pos = (target_pos - current_ee_pos) / num_rows  # 让 ee_pos 逐步回到目标位置
+                            delta_pos = delta_pos *3
+                            # 创建新的 action，每行值让 ee_pos 逐步回到目标
+                            action = np.tile(np.array([delta_pos[0], delta_pos[1], delta_pos[2], 0.00, 0, 0.00, -1]), (num_rows, 1))
 
                         
                 
@@ -346,10 +346,92 @@ def build_trajectory_visual(scene: ManiSkillScene, traj_points):
 
     return visual_spheres  # 返回所有小球的 Actor 列表
 
-
-    return visual_spheres  # 直接返回存储小球 Actor 的列表
 def update_trajectory_visual(traj_visual, traj_points):
     """ 更新已有的轨迹可视化对象（更新小球位置） """
     for sphere, new_pose in zip(traj_visual, traj_points):
         sphere.set_pose(sapien.Pose(p=new_pose))  # 直接更新 Actor 的位置
+
+
+def build_random_objects_visual(scene, config_path):
+    """
+    在指定 scene 中根据 YAML 配置文件随机生成物体，并返回生成的 Actor 列表。
+    
+    参数：
+        scene: ManiSkillScene 对象，用于创建物体。
+        config_path: YAML 配置文件路径，格式参考示例。
+    
+    返回：
+        List[Actor] - 生成的所有物体 Actor 列表。
+    """
+    # 读取 YAML 配置文件
+    with open(config_path, 'r') as f:
+        config = yaml.safe_load(f)
+    
+    # 获取生成物体的空间范围
+    space_min = np.array(config["space"]["min"])
+    space_max = np.array(config["space"]["max"])
+    
+    object_actors = []
+    global_index = 0  # 全局计数器，确保名称唯一
+    
+    # 遍历每种物体配置
+    for obj_config in config["objects"]:
+        obj_type = obj_config.get("type", "").lower()
+        count = obj_config.get("count", 1)
+        color = obj_config.get("color", [1, 1, 1, 1])
+        
+        for i in range(count):
+            # 在设定空间内随机生成位置
+            pos = np.random.uniform(low=space_min, high=space_max)
+            
+            # 每个物体需要新的 builder
+            builder = scene.create_actor_builder()
+            
+            if obj_type == "sphere":
+                radius = obj_config.get("radius", 0.01)
+                builder.add_sphere_visual(
+                    pose=sapien.Pose(p=pos),
+                    radius=radius,
+                    material=sapien.render.RenderMaterial(base_color=color)
+                )
+            elif obj_type == "box":
+                size = obj_config.get("size", [0.05, 0.05, 0.05])
+                # 假设 add_box_visual 接受半边长参数（half_size）
+                half_size = [s / 2 for s in size]
+                builder.add_box_visual(
+                    pose=sapien.Pose(p=pos),
+                    half_size=half_size,
+                    material=sapien.render.RenderMaterial(base_color=color)
+                )
+            elif obj_type == "cylinder":
+                radius = obj_config.get("radius", 0.01)
+                half_length = obj_config.get("half_length", 0.1)
+                builder.add_cylinder_visual(
+                    pose=sapien.Pose(p=pos),
+                    radius=radius,
+                    half_length=half_length,
+                    material=sapien.render.RenderMaterial(base_color=color)
+                )
+            elif obj_type == "capsule":
+                radius = obj_config.get("radius", 0.01)
+                half_length = obj_config.get("half_length", 0.05)
+                # 假设 scene 的 builder 提供 add_capsule_visual 方法
+                builder.add_capsule_visual(
+                    pose=sapien.Pose(p=pos),
+                    radius=radius,
+                    half_length=half_length,
+                    material=sapien.render.RenderMaterial(base_color=color)
+                )
+            else:
+                print(f"物体类型 {obj_type} 暂不支持。")
+                continue
+            
+            # 使用全局唯一的名称创建物体（此处使用 kinematic 模型，可根据需要改为 dynamic）
+            actor = builder.build_kinematic(name=f"random_{obj_type}_{global_index}")
+            print(f"生成物体 {actor.name}，位置 {pos}")
+            global_index += 1
+            actor.set_pose(sapien.Pose(p=pos))
+            object_actors.append(actor)
+    
+    return object_actors
 

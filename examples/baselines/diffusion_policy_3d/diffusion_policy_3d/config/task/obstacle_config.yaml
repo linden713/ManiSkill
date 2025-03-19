@@ -1,0 +1,27 @@
+space:
+  min: [-0.3, -0.3, 0.0]
+  max: [0.3, 0.3, 1.0]
+objects:
+  - type: sphere
+    count: 1
+    radius: 0.02
+    color: [1, 0, 0, 0.8]
+  - type: box
+    count: 1
+    size: [0.1, 0.1, 0.1]
+    color: [0, 1, 0, 0.8]
+  - type: cylinder
+    count: 1
+    radius: 0.015
+    half_length: 0.2
+    color: [0, 0, 1, 0.8]
+  - type: capsule
+    count: 1
+    radius: 0.01
+    half_length: 0.05
+    color: [1, 1, 0, 0.8]
+  # - type: cone
+  #   count: 2
+  #   radius: 0.02
+  #   height: 0.1
+  #   color: [0.5, 0, 0.5, 0.8]
