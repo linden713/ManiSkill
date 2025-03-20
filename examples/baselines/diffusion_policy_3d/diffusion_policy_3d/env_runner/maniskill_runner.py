@@ -231,7 +231,7 @@ class ManiSkillRunner(BaseRunner):
             # start rollout
             obs, _ = env.reset(seed=0)
             policy.reset()
-
+            # print(obs)
             done = False
             traj_reward = 0
             is_success = False
@@ -242,6 +242,7 @@ class ManiSkillRunner(BaseRunner):
                 obs_dict = dict_apply(np_obs_dict,
                                       lambda x: torch.from_numpy(x).to(
                                           device=device)) # TypeError: expected np.ndarray (got list)
+                
 
                 with torch.no_grad():
                     obs_dict_input = {}
@@ -266,7 +267,7 @@ class ManiSkillRunner(BaseRunner):
                     if self.traj_visual is not None:
                         update_trajectory_visual(self.traj_visual, future_ee_pos)
 
-                    else:
+                    if count == 1:
                         self.traj_visual = build_trajectory_visual(self.env.base_env.scene, future_ee_pos)
                         random_actors = build_random_objects_visual(self.env.base_env.scene, "diffusion_policy_3d/config/task/obstacle_config.yaml")
 
@@ -340,6 +341,7 @@ def build_trajectory_visual(scene: ManiSkillScene, traj_points):
             radius=0.01,  
             material=sapien.render.RenderMaterial(base_color=[1, 0, 0, 0.8])  
         )
+        builder.initial_pose = sapien.Pose(p=point, q=[1, 0, 0, 0])
         sphere_actor = builder.build_kinematic(name=f"trajectory_sphere_{i}")  # 添加唯一索引
         sphere_actor.set_pose(sapien.Pose(p=point)) 
         visual_spheres.append(sphere_actor)  # 存储 Actor
@@ -427,7 +429,8 @@ def build_random_objects_visual(scene, config_path):
                 continue
             
             # 使用全局唯一的名称创建物体（此处使用 kinematic 模型，可根据需要改为 dynamic）
-            actor = builder.build_kinematic(name=f"random_{obj_type}_{global_index}")
+            builder.initial_pose = sapien.Pose(p=pos, q=[1, 0, 0, 0])
+            actor = builder.build_static(name=f"random_{obj_type}_{global_index}")
             print(f"生成物体 {actor.name}，位置 {pos}")
             global_index += 1
             actor.set_pose(sapien.Pose(p=pos))

@@ -1,6 +1,6 @@
 space:
   min: [-0.3, -0.3, 0.0]
-  max: [0.3, 0.3, 1.0]
+  max: [0.3, 0.3, 0.5]
 objects:
   - type: sphere
     count: 1
